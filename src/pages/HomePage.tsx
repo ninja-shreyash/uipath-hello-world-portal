@@ -1,148 +1,265 @@
-// Home page of the app, Currently a demo page for demonstration.
-// Please rewrite this file to implement your own logic. Do not replace or delete it, simply rewrite this HomePage.tsx file.
-import { useEffect } from 'react'
-import { Sparkles } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { Toaster, toast } from '@/components/ui/sonner'
-import { create } from 'zustand'
-import { useShallow } from 'zustand/react/shallow'
-import { AppLayout } from '@/components/layout/AppLayout'
-
-// Timer store: independent slice with a clear, minimal API, for demonstration
-type TimerState = {
-  isRunning: boolean;
-  elapsedMs: number;
-  start: () => void;
-  pause: () => void;
-  reset: () => void;
-  tick: (deltaMs: number) => void;
-}
-
-const useTimerStore = create<TimerState>((set) => ({
-  isRunning: false,
-  elapsedMs: 0,
-  start: () => set({ isRunning: true }),
-  pause: () => set({ isRunning: false }),
-  reset: () => set({ elapsedMs: 0, isRunning: false }),
-  tick: (deltaMs) => set((s) => ({ elapsedMs: s.elapsedMs + deltaMs })),
-}))
-
-// Counter store: separate slice to showcase multiple stores without coupling
-type CounterState = {
-  count: number;
-  inc: () => void;
-  reset: () => void;
-}
-
-const useCounterStore = create<CounterState>((set) => ({
-  count: 0,
-  inc: () => set((s) => ({ count: s.count + 1 })),
-  reset: () => set({ count: 0 }),
-}))
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React, { useState, useEffect } from 'react';
+import { Activity, CheckCircle, Clock, Server, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import type { SystemInfo, UiPathStatus, ApiResponse } from '@shared/types';
+import { format } from 'date-fns';
 export function HomePage() {
-  // Select only what is needed to avoid unnecessary re-renders
-  const { isRunning, elapsedMs } = useTimerStore(
-    useShallow((s) => ({ isRunning: s.isRunning, elapsedMs: s.elapsedMs })),
-  )
-  const start = useTimerStore((s) => s.start)
-  const pause = useTimerStore((s) => s.pause)
-  const resetTimer = useTimerStore((s) => s.reset)
-  const count = useCounterStore((s) => s.count)
-  const inc = useCounterStore((s) => s.inc)
-  const resetCount = useCounterStore((s) => s.reset)
-
-  // Drive the timer only while running; avoid update-depth issues with a scoped RAF
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [uiPathStatus, setUiPathStatus] = useState<UiPathStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (!isRunning) return
-    let raf = 0
-    let last = performance.now()
-    const loop = () => {
-      const now = performance.now()
-      const delta = now - last
-      last = now
-      // Read store API directly to keep effect deps minimal and stable
-      useTimerStore.getState().tick(delta)
-      raf = requestAnimationFrame(loop)
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [systemResponse, uiPathResponse] = await Promise.all([
+          fetch('/api/system-info').then(res => res.json()),
+          fetch('/api/uipath-status').then(res => res.json())
+        ]);
+        const systemData = systemResponse as ApiResponse<SystemInfo>;
+        const uiPathData = uiPathResponse as ApiResponse<UiPathStatus>;
+        if (systemData.success && systemData.data) {
+          setSystemInfo(systemData.data);
+        } else {
+          console.error('Failed to fetch system info:', systemData.error);
+        }
+        if (uiPathData.success && uiPathData.data) {
+          setUiPathStatus(uiPathData.data);
+        } else {
+          console.error('Failed to fetch UiPath status:', uiPathData.error);
+        }
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load system information');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+    // Refresh data every 30 seconds
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+  const formatTimestamp = (timestamp: string) => {
+    try {
+      return format(new Date(timestamp), 'PPpp');
+    } catch {
+      return timestamp;
     }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [isRunning])
-
-  const onPleaseWait = () => {
-    inc()
-    if (!isRunning) {
-      start()
-      toast.success('Building your app…', {
-        description: 'Hang tight, we\'re setting everything up.',
-      })
-    } else {
-      pause()
-      toast.info('Taking a short pause', {
-        description: 'We\'ll continue shortly.',
-      })
-    }
-  }
-
-  const formatted = formatDuration(elapsedMs)
-
-  return (
-    <AppLayout>
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-        <ThemeToggle />
-        <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-        <div className="text-center space-y-8 relative z-10 animate-fade-in">
-          <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-              <Sparkles className="w-8 h-8 text-white rotating" />
+  };
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-8 md:py-10 lg:py-12">
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="text-sm text-muted-foreground">Loading system information...</p>
             </div>
-          </div>
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button 
-              size="lg"
-              onClick={onPleaseWait}
-              className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-              aria-live="polite"
-            >
-              Please Wait
-            </Button>
-          </div>
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-            <div>
-              Time elapsed: <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-            </div>
-            <div>
-              Coins: <span className="font-medium tabular-nums text-foreground">{count}</span>
-            </div>
-          </div>
-          <div className="flex justify-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { resetTimer(); resetCount(); toast('Reset complete') }}>
-              Reset
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { inc(); toast('Coin added') }}>
-              Add Coin
-            </Button>
           </div>
         </div>
-        <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-          <p>Powered by Cloudflare</p>
-        </footer>
-        <Toaster richColors closeButton />
       </div>
-    </AppLayout>
-  )
+    );
+  }
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="py-8 md:py-10 lg:py-12">
+        <ThemeToggle className="fixed top-4 right-4 z-50" />
+        {/* Header */}
+        <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40 mb-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
+                  <Activity className="h-4 w-4 text-white" />
+                </div>
+                <h1 className="text-lg font-semibold text-foreground">UiPath Hello World Portal</h1>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {uiPathStatus && (
+                <Badge 
+                  variant={uiPathStatus.connected ? "default" : "destructive"}
+                  className={uiPathStatus.connected ? "bg-green-100 text-green-800 hover:bg-green-200" : ""}
+                >
+                  {uiPathStatus.connected ? (
+                    <>
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Connected
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Disconnected
+                    </>
+                  )}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </header>
+        {/* Main Content */}
+        <main className="space-y-8">
+          {error && (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="pt-6">
+                <div className="flex items-center space-x-2 text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <p className="text-sm font-medium">Error loading system information</p>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">{error}</p>
+              </CardContent>
+            </Card>
+          )}
+          {/* Welcome Section */}
+          <div className="text-center space-y-4">
+            <h2 className="text-4xl md:text-5xl font-bold text-foreground leading-tight">
+              Welcome to UiPath
+              <span className="block text-3xl md:text-4xl text-muted-foreground font-normal mt-2">
+                Hello World Portal
+              </span>
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Your gateway to UiPath automation. Monitor system status, check connectivity, 
+              and manage your automation workflows from this centralized dashboard.
+            </p>
+          </div>
+          {/* System Information Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* System Information Card */}
+            <Card className="border border-border bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Server className="h-5 w-5 text-blue-600" />
+                  <span>System Information</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {systemInfo ? (
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="flex justify-between items-center py-2 border-b border-border last:border-b-0">
+                      <span className="text-sm text-muted-foreground">Current Time</span>
+                      <span className="font-medium text-foreground text-sm">
+                        {formatTimestamp(systemInfo.timestamp)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-border last:border-b-0">
+                      <span className="text-sm text-muted-foreground">Environment</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {systemInfo.environment}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-border last:border-b-0">
+                      <span className="text-sm text-muted-foreground">Version</span>
+                      <span className="font-medium text-foreground text-sm">
+                        {systemInfo.version}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-sm text-muted-foreground">System Uptime</span>
+                      <span className="font-medium text-foreground text-sm">
+                        {systemInfo.uptime}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <Server className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">System information unavailable</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            {/* UiPath Connection Status Card */}
+            <Card className="border border-border bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Activity className="h-5 w-5 text-blue-600" />
+                  <span>UiPath Orchestrator</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {uiPathStatus ? (
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="flex justify-between items-center py-2 border-b border-border last:border-b-0">
+                      <span className="text-sm text-muted-foreground">Connection Status</span>
+                      <Badge 
+                        variant={uiPathStatus.connected ? "default" : "destructive"}
+                        className={uiPathStatus.connected ? "bg-green-100 text-green-800 hover:bg-green-200" : ""}
+                      >
+                        {uiPathStatus.status}
+                      </Badge>
+                    </div>
+                    {uiPathStatus.orchestratorUrl && (
+                      <div className="flex justify-between items-center py-2 border-b border-border last:border-b-0">
+                        <span className="text-sm text-muted-foreground">Orchestrator URL</span>
+                        <span className="font-medium text-foreground text-sm truncate max-w-[200px]">
+                          {uiPathStatus.orchestratorUrl}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-sm text-muted-foreground">Last Checked</span>
+                      <div className="flex items-center space-x-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-medium text-foreground text-sm">
+                          {formatTimestamp(uiPathStatus.lastChecked)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">UiPath status unavailable</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          {/* Status Summary */}
+          <Card className="border border-border bg-card">
+            <CardContent className="pt-6">
+              <div className="text-center space-y-2">
+                <div className="flex items-center justify-center space-x-2">
+                  {uiPathStatus?.connected ? (
+                    <>
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <span className="text-lg font-medium text-foreground">System Ready</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="h-5 w-5 text-yellow-600" />
+                      <span className="text-lg font-medium text-foreground">System Initializing</span>
+                    </>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {uiPathStatus?.connected 
+                    ? "All systems are operational and ready for automation workflows."
+                    : "Please check your UiPath Orchestrator connection and try again."
+                  }
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+        {/* Footer */}
+        <footer className="mt-16 pt-8 border-t border-border">
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground">
+              Built with ❤️ at Cloudflare
+            </p>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
 }
