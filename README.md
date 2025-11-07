@@ -2,7 +2,7 @@
 
 A clean, professional single-page UiPath-aware dashboard that demonstrates basic UiPath Orchestrator connectivity and displays a welcoming interface for UiPath automation users.
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ninja-shreyash/uipath-hello-world-portal)
 
 ## Overview
 
@@ -123,7 +123,7 @@ const startProcess = useStartProcess();
 
 ### Cloudflare Workers Deployment
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ninja-shreyash/uipath-hello-world-portal)
 
 **Manual Deployment:**
 
